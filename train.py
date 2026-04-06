@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import torch
+import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -47,6 +48,14 @@ def set_seed(seed: int) -> None:
 
 def get_device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def prepare_model(model: nn.Module, device: torch.device) -> nn.Module:
+    model = model.to(device)
+    if device.type == "cuda" and torch.cuda.device_count() > 1:
+        print(f"Using DataParallel across {torch.cuda.device_count()} GPUs.")
+        model = nn.DataParallel(model)
+    return model
 
 
 def build_dataloaders(config: ProjectConfig, use_weather: bool) -> Tuple[Dict[str, DataLoader], Dict[str, int]]:
@@ -146,7 +155,7 @@ def train_experiment(
     device = get_device()
     loaders, split_sizes = build_dataloaders(config, use_weather)
     criterion = BCEDiceLoss()
-    model = ENet21(num_classes=1).to(device)
+    model = prepare_model(ENet21(num_classes=1), device)
     if pretrained_checkpoint:
         load_checkpoint(pretrained_checkpoint, model, map_location=str(device))
     optimizer = Adam(model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
@@ -225,6 +234,8 @@ def train_experiment(
         "experiment_name": experiment_name,
         "use_weather": use_weather,
         "device": str(device),
+        "gpu_count": torch.cuda.device_count() if device.type == "cuda" else 0,
+        "multi_gpu": isinstance(model, nn.DataParallel),
         "best_val_iou": best_iou,
     }
     with (experiment_dir / "metadata.json").open("w", encoding="utf-8") as file:
@@ -232,7 +243,7 @@ def train_experiment(
 
     plot_training_history(str(experiment_dir / "training_curves.png"), history)
 
-    best_model = ENet21(num_classes=1).to(device)
+    best_model = prepare_model(ENet21(num_classes=1), device)
     load_checkpoint(str(checkpoint_dir / "best_model.pth"), best_model, map_location=str(device))
     test_metrics = run_epoch(best_model, loaders["test"], criterion, device, optimizer=None, threshold=config.threshold)
     with (experiment_dir / "test_metrics.json").open("w", encoding="utf-8") as file:
