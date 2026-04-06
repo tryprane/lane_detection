@@ -8,19 +8,17 @@ from torch.utils.data import Dataset
 
 
 def _normalize_rel_path(path_str: str) -> str:
-    return path_str.strip().lstrip("/").replace("/", "\\")
+    # Keep dataset-relative paths portable across Linux and Windows.
+    return path_str.strip().lstrip("/").replace("\\", "/")
 
 
 def _resolve_existing_file(data_root: Path, relative_path: str) -> Path:
-    candidates = [
-        data_root / relative_path,
-        data_root / relative_path.replace("\\", "/"),
-        data_root / relative_path.replace("/", "\\"),
-    ]
+    normalized = relative_path.replace("\\", "/")
+    candidates = [data_root / normalized]
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    return data_root / relative_path
+    return data_root / normalized
 
 
 def _parse_list_line(parts: Sequence[str], line_number: int, list_path: Path) -> Dict:
