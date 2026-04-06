@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import cv2
@@ -15,6 +15,13 @@ def _normalize_rel_path(path_str: str) -> str:
 def _resolve_existing_file(data_root: Path, relative_path: str) -> Path:
     normalized = relative_path.replace("\\", "/")
     candidates = [data_root / normalized]
+
+    posix_path = PurePosixPath(normalized)
+    parts = posix_path.parts
+    if parts:
+        duplicated_root = PurePosixPath(parts[0], *parts)
+        candidates.append(data_root / str(duplicated_root))
+
     for candidate in candidates:
         if candidate.exists():
             return candidate
